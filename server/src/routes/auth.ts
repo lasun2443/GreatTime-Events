@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { comparePassword } from '../lib/auth';
+import { comparePassword, hashPassword } from '../lib/auth';
 import { signToken } from '../lib/jwt';
 
 const router = Router();

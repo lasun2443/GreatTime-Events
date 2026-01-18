@@ -67,7 +67,6 @@ export default function AdminDashboard() {
             <div className="w-full min-h-screen p-4 md:p-8 flex items-center justify-center" style={{ backgroundColor: "#E5E1D8" }}>
                 <p style={{ color: "#C62828" }}>Error: {error}</p>
             </div>
-        </div>
     );
   }
 
