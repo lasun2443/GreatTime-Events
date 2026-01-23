@@ -1,34 +1,31 @@
-// src/app/api/bookings/route.ts
+import { Router, Request, Response } from 'express';
+import { prisma } from '../lib/prisma';
 
-import { NextRequest } from "next/server";
-import { prisma } from "@/app/lib/prisma";
-import { createErrorResponse, createSuccessResponse } from "@/app/lib/auth";
+const router = Router();
 
 // GET - Fetch all bookings with optional filters
-export async function GET(request: NextRequest) {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status");
-    const customer = searchParams.get("customer");
+    const { status, customer } = req.query;
 
     interface WhereClause {
       status?: string;
       customer?: {
         contains: string;
-        mode: "insensitive";
+        mode: 'insensitive';
       };
     }
 
     const where: WhereClause = {};
 
     if (status) {
-      where.status = status;
+      where.status = status as string;
     }
 
     if (customer) {
       where.customer = {
-        contains: customer,
-        mode: "insensitive",
+        contains: customer as string,
+        mode: 'insensitive',
       };
     }
 
@@ -44,29 +41,27 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: {
-        createdAt: "desc",
+        createdAt: 'desc',
       },
     });
 
-    return createSuccessResponse({ bookings });
+    return res.status(200).json({ bookings });
   } catch (error) {
-    console.error("Fetch bookings error:", error);
-    return createErrorResponse("Internal server error", 500);
+    console.error('Fetch bookings error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});
 
 // POST - Create a new booking
-export async function POST(request: NextRequest) {
+router.post('/', async (req: Request, res: Response) => {
   try {
-    const body = await request.json();
-    const { customer, phone, email, hallId, date, amount } = body;
+    const { customer, phone, email, hallId, date, amount } = req.body;
 
     // Validation
     if (!customer || !phone || !hallId || !date) {
-      return createErrorResponse(
-        "Customer, phone, hall, and date are required",
-        400
-      );
+      return res
+        .status(400)
+        .json({ error: 'Customer, phone, hall, and date are required' });
     }
 
     // Check if hall exists
@@ -75,7 +70,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!hall) {
-      return createErrorResponse("Hall not found", 404);
+      return res.status(404).json({ error: 'Hall not found' });
     }
 
     // Check if hall is already booked on this date
@@ -85,13 +80,13 @@ export async function POST(request: NextRequest) {
         hallId,
         date: bookingDate,
         status: {
-          in: ["PENDING", "APPROVED"],
+          in: ['PENDING', 'APPROVED'],
         },
       },
     });
 
     if (existingBooking) {
-      return createErrorResponse("Hall is already booked on this date", 409);
+      return res.status(409).json({ error: 'Hall is already booked on this date' });
     }
 
     // Create booking
@@ -103,8 +98,8 @@ export async function POST(request: NextRequest) {
         hallId,
         date: bookingDate,
         amount: amount ? parseFloat(amount) : hall.price,
-        status: "PENDING",
-        paymentStatus: "PENDING",
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
       },
       include: {
         hall: {
@@ -117,27 +112,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return createSuccessResponse(
-      {
-        message: "Booking created successfully",
-        booking,
-      },
-      201
-    );
+    return res.status(201).json({
+      message: 'Booking created successfully',
+      booking,
+    });
   } catch (error) {
-    console.error("Create booking error:", error);
-    return createErrorResponse("Internal server error", 500);
+    console.error('Create booking error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});
 
 // PATCH - Update booking status
-export async function PATCH(request: NextRequest) {
+router.patch('/', async (req: Request, res: Response) => {
   try {
-    const body = await request.json();
-    const { id, status, paymentStatus } = body;
+    const { id, status, paymentStatus } = req.body;
 
     if (!id) {
-      return createErrorResponse("Booking ID is required", 400);
+      return res.status(400).json({ error: 'Booking ID is required' });
     }
 
     // Check if booking exists
@@ -146,7 +137,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (!existingBooking) {
-      return createErrorResponse("Booking not found", 404);
+      return res.status(404).json({ error: 'Booking not found' });
     }
 
     // Prepare update data
@@ -158,15 +149,15 @@ export async function PATCH(request: NextRequest) {
     const updateData: UpdateData = {};
 
     if (status) {
-      if (!["PENDING", "APPROVED", "CANCELLED", "COMPLETED"].includes(status)) {
-        return createErrorResponse("Invalid status", 400);
+      if (!['PENDING', 'APPROVED', 'CANCELLED', 'COMPLETED'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
       }
       updateData.status = status;
     }
 
     if (paymentStatus) {
-      if (!["PENDING", "PAID", "FAILED", "REFUNDED"].includes(paymentStatus)) {
-        return createErrorResponse("Invalid payment status", 400);
+      if (!['PENDING', 'PAID', 'FAILED', 'REFUNDED'].includes(paymentStatus)) {
+        return res.status(400).json({ error: 'Invalid payment status' });
       }
       updateData.paymentStatus = paymentStatus;
     }
@@ -186,45 +177,46 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    return createSuccessResponse({
-      message: "Booking updated successfully",
+    return res.status(200).json({
+      message: 'Booking updated successfully',
       booking,
     });
   } catch (error) {
-    console.error("Update booking error:", error);
-    return createErrorResponse("Internal server error", 500);
+    console.error('Update booking error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});
 
 // DELETE - Delete a booking
-export async function DELETE(request: NextRequest) {
+router.delete('/', async (req: Request, res: Response) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const { id } = req.query;
 
     if (!id) {
-      return createErrorResponse("Booking ID is required", 400);
+      return res.status(400).json({ error: 'Booking ID is required' });
     }
 
     // Check if booking exists
     const booking = await prisma.booking.findUnique({
-      where: { id },
+      where: { id: id as string },
     });
 
     if (!booking) {
-      return createErrorResponse("Booking not found", 404);
+      return res.status(404).json({ error: 'Booking not found' });
     }
 
     // Delete booking
     await prisma.booking.delete({
-      where: { id },
+      where: { id: id as string },
     });
 
-    return createSuccessResponse({
-      message: "Booking deleted successfully",
+    return res.status(200).json({
+      message: 'Booking deleted successfully',
     });
   } catch (error) {
-    console.error("Delete booking error:", error);
-    return createErrorResponse("Internal server error", 500);
+    console.error('Delete booking error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});
+
+export default router;
